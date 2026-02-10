@@ -1,0 +1,11 @@
+{
+  "name": "Buzas, John",
+  "preferred": [
+    "Bathing",
+    "Cooking-Basic",
+    "Likes Music"
+  ],
+  "other_fields": {
+    "source": "manual"
+  }
+}
