@@ -41,25 +41,20 @@ static void skip_whitespace(Parser *parser) {
 
 static JsonValue *json_new_value(Parser *parser, JsonType type) {
   JsonValue *v = (JsonValue *)arena_alloc(parser->arena, sizeof(JsonValue));
-  if (!v) {
+  if (!v)
     return NULL;
-  }
-
   v->type = type;
   memset(&v->v, 0, sizeof(v->v));
-
   return v;
 }
 
 JsonValue *start_json_parse(Arena *a, const char *src, size_t len) {
-  Parser parser = {src + len, src, a};
+  Parser parser = {src, src + len, a};
   skip_whitespace(&parser);
-  JsonValue *root =
-      parse_value(&parser); // gonna be our recursive function which takes us to
-                            // the end of the file (barring trailing whitespace)
+  JsonValue *root = parse_value(&parser);
   skip_whitespace(&parser);
   return root;
-};
+}
 
 static JsonValue *parse_value(Parser *parser) {
   int c = get_char(parser);
@@ -102,53 +97,46 @@ static JsonValue *parse_value(Parser *parser) {
 };
 
 static JsonValue *parse_object(Parser *parser) {
-
   if (consume_char(parser) != '{')
     return NULL;
 
   JsonValue *obj = json_new_value(parser, JSON_OBJECT);
-  obj->v.object = NULL;
-  JsonPair *tail = NULL; // tail of the linked list
+  if (!obj)
+    return NULL;
+
+  JsonPair *tail = NULL;
+  skip_whitespace(parser);
+
   if (get_char(parser) == '}') {
     consume_char(parser);
-    return obj; // empty object
+    return obj;
   }
 
   while (1) {
     skip_whitespace(parser);
-
-    if (get_char(parser) != '"') {
+    if (get_char(parser) != '"')
       return NULL;
-    }
 
     char *key = parse_string(parser);
-    if (!key) {
+    if (!key)
       return NULL;
-    }
 
     skip_whitespace(parser);
-
-    if (consume_char(parser) != ':') {
+    if (consume_char(parser) != ':')
       return NULL;
-    }
 
     JsonValue *value = parse_value(parser);
-
-    if (!value) {
+    if (!value)
       return NULL;
-    }
 
-    // create pair
     JsonPair *pair = (JsonPair *)arena_alloc(parser->arena, sizeof(JsonPair));
-    if (!pair) {
+    if (!pair)
       return NULL;
-    }
 
     pair->key = key;
     pair->value = value;
     pair->next = NULL;
 
-    // link the list
     if (!obj->v.object) {
       obj->v.object = pair;
     } else {
@@ -157,172 +145,137 @@ static JsonValue *parse_object(Parser *parser) {
     tail = pair;
 
     skip_whitespace(parser);
-
     int c = consume_char(parser);
-    skip_whitespace(parser);
-    if (c == '}') {
+    if (c == '}')
       return obj;
-    }
-    if (c != ',') {
+    if (c != ',')
       return NULL;
-    }
   }
 }
-
 static JsonValue *parse_array(Parser *parser) {
-  if (consume_char(parser) != '[') {
+  if (consume_char(parser) != '[')
     return NULL;
-  }
 
   JsonValue *arr = json_new_value(parser, JSON_ARRAY);
   if (!arr)
     return NULL;
 
-  arr->v.array = NULL;
-  JsonNode *tail = NULL; // tail of the linked list
-
+  JsonNode *tail = NULL;
   skip_whitespace(parser);
 
   if (get_char(parser) == ']') {
     consume_char(parser);
-    return arr; // empty array
+    return arr;
   }
 
   while (1) {
     skip_whitespace(parser);
-
-    // create a node
     JsonValue *value = parse_value(parser);
-
     if (!value)
       return NULL;
-    JsonNode *arr_node =
-        (JsonNode *)arena_alloc(parser->arena, sizeof(JsonNode));
 
-    if (!arr_node)
+    JsonNode *node = (JsonNode *)arena_alloc(parser->arena, sizeof(JsonNode));
+    if (!node)
       return NULL;
-    arr_node->val = value;
-    arr_node->next = NULL;
+
+    node->val = value;
+    node->next = NULL;
 
     if (!arr->v.array) {
-      arr->v.array = arr_node;
+      arr->v.array = node;
     } else {
-      tail->next = arr_node;
+      tail->next = node;
     }
-    tail = arr_node;
+    tail = node;
 
     skip_whitespace(parser);
-
     int c = consume_char(parser);
-    if (c == ']') {
+    if (c == ']')
       return arr;
-    }
-    if (c != ',') {
+    if (c != ',')
       return NULL;
-    }
   }
+}
+
+static char *parse_string(Parser *parser) {
+  if (consume_char(parser) != '"')
+    return NULL;
+
+  const char *start = parser->p;
+  while (parser->p < parser->end && *parser->p != '"') {
+    parser->p++;
+  }
+
+  if (parser->p >= parser->end)
+    return NULL;
+
+  size_t len = (size_t)(parser->p - start);
+  char *v = (char *)arena_alloc(parser->arena, len + 1);
+  if (!v)
+    return NULL;
+
+  memcpy(v, start, len);
+  v[len] = '\0';
+
+  consume_char(parser);
+  return v;
 }
 
 static JsonValue *parse_number(Parser *parser) {
   const char *start = parser->p;
-  const char *p = parser->p;
-  if (p >= parser->end) {
-    return NULL;
+
+  if (parser->p < parser->end && *parser->p == '-') {
+    parser->p++;
   }
 
-  if (*p == '0') {
-    p++;
-    // check if leading 0 has digit after it
-    if (p < parser->end && *p >= '0' && *p <= '9') {
+  if (parser->p < parser->end && *parser->p == '0') {
+    parser->p++;
+    if (parser->p < parser->end && *parser->p >= '0' && *parser->p <= '9') {
       return NULL;
     }
-  } else if (*p >= '1' && *p <= '9') {
-    while (p < parser->end && *p >= '0' && *p <= '9') {
-      p++;
+  } else if (parser->p < parser->end && *parser->p >= '1' &&
+             *parser->p <= '9') {
+    while (parser->p < parser->end && *parser->p >= '0' && *parser->p <= '9') {
+      parser->p++;
     }
   } else {
     return NULL;
   }
 
-  if (p < parser->end && *p == '.') {
-    p++;
-    if (p >= parser->end || !(*p >= '0' && *p <= '9')) {
+  if (parser->p < parser->end && *parser->p == '.') {
+    parser->p++;
+    if (parser->p >= parser->end || !(*parser->p >= '0' && *parser->p <= '9')) {
       return NULL;
     }
-    // must have digits after decimal
-    while (p < parser->end && *p >= '0' && *p <= '9') {
-      p++;
+    while (parser->p < parser->end && *parser->p >= '0' && *parser->p <= '9') {
+      parser->p++;
     }
   }
-  if (p < parser->end && (*p == 'e' || *p == 'E')) {
-    p++;
-    if (p < parser->end && (*p == '+' || *p == '-')) {
-      p++;
+
+  if (parser->p < parser->end && (*parser->p == 'e' || *parser->p == 'E')) {
+    parser->p++;
+    if (parser->p < parser->end && (*parser->p == '+' || *parser->p == '-')) {
+      parser->p++;
     }
-    if (p >= parser->end || !(*p >= '0' && *p <= '9')) {
+    if (parser->p >= parser->end || !(*parser->p >= '0' && *parser->p <= '9')) {
       return NULL;
     }
-    while (p < parser->end && *p >= '0' && *p <= '9') {
-      p++;
+    while (parser->p < parser->end && *parser->p >= '0' && *parser->p <= '9') {
+      parser->p++;
     }
   }
 
-  size_t len = (size_t)(p - start);
-
-  char buf[64];
-
-  if (len >= sizeof(buf)) {
+  char *endptr;
+  double value = strtod(start, &endptr);
+  if (endptr == start)
     return NULL;
-  }
-
-  memcpy(buf, start, len);
-  buf[len] = '\0';
-  char *endpointer = NULL;
-
-  double value = strtod(buf, &endpointer);
-  if (endpointer == buf) {
-    return NULL;
-  }
-
-  parser->p = p;
 
   JsonValue *v = json_new_value(parser, JSON_NUMBER);
   if (!v)
     return NULL;
   v->v.number = value;
   return v;
-};
-
-static char *parse_string(Parser *parser) {
-  char c = consume_char(parser);
-  if (!(c == '"')) {
-    return NULL;
-  }
-
-  const char *start = parser->p;
-  const char *p = parser->p;
-
-  while (p < parser->end && *p != '"') {
-    p++;
-  };
-
-  parser->p = p;
-  char buf[64];
-
-  size_t len = (size_t)(p - start);
-  if (len >= sizeof(buf)) {
-    return NULL;
-  }
-
-  memcpy(buf, start, len);
-  buf[len] = '\0';
-
-  char *v = (char *)arena_alloc(parser->arena, len + 1);
-  memcpy(v, &buf[0], len);
-
-  return v;
 }
-
 static JsonValue *parse_true(Parser *parser) {
   const char *start = parser->p;
 
