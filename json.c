@@ -98,7 +98,6 @@ static JsonValue *parse_value(Parser *parser) {
 
 static JsonValue *parse_object(Parser *parser) {
   if (consume_char(parser) != '{') {
-    printf("wahhh\n");
     return NULL;
   }
 
@@ -120,7 +119,6 @@ static JsonValue *parse_object(Parser *parser) {
 
     // If not '}', we expect a key string
     if (get_char(parser) != '"') {
-      printf("wahhh\n");
       return NULL;
     }
 
@@ -160,16 +158,13 @@ static JsonValue *parse_object(Parser *parser) {
 
     skip_whitespace(parser);
 
-    // Check delimiter
     int c = get_char(parser);
     if (c == '}') {
       consume_char(parser);
       return obj;
     } else if (c == ',') {
       consume_char(parser);
-      // Continue to next key-value pair
     } else {
-      // Anything else is a syntax error
       return NULL;
     }
   }
