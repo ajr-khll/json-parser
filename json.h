@@ -40,8 +40,8 @@ struct JsonNode {
 };
 
 typedef struct Parser {
-  const char *end;
   const char *p;
+  const char *end;
   Arena *arena;
 } Parser;
 

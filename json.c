@@ -97,38 +97,51 @@ static JsonValue *parse_value(Parser *parser) {
 };
 
 static JsonValue *parse_object(Parser *parser) {
-  if (consume_char(parser) != '{')
+  if (consume_char(parser) != '{') {
+    printf("wahhh\n");
     return NULL;
+  }
 
   JsonValue *obj = json_new_value(parser, JSON_OBJECT);
   if (!obj)
     return NULL;
 
+  obj->v.object = NULL;
   JsonPair *tail = NULL;
-  skip_whitespace(parser);
-
-  if (get_char(parser) == '}') {
-    consume_char(parser);
-    return obj;
-  }
 
   while (1) {
     skip_whitespace(parser);
-    if (get_char(parser) != '"')
+
+    // Check for empty object or end of object
+    if (get_char(parser) == '}') {
+      consume_char(parser);
+      return obj;
+    }
+
+    // If not '}', we expect a key string
+    if (get_char(parser) != '"') {
+      printf("wahhh\n");
       return NULL;
+    }
 
     char *key = parse_string(parser);
     if (!key)
       return NULL;
 
     skip_whitespace(parser);
+
+    // Expect colon
     if (consume_char(parser) != ':')
       return NULL;
 
+    skip_whitespace(parser);
+
+    // Parse the value
     JsonValue *value = parse_value(parser);
     if (!value)
       return NULL;
 
+    // Create the pair
     JsonPair *pair = (JsonPair *)arena_alloc(parser->arena, sizeof(JsonPair));
     if (!pair)
       return NULL;
@@ -137,6 +150,7 @@ static JsonValue *parse_object(Parser *parser) {
     pair->value = value;
     pair->next = NULL;
 
+    // Append to linked list
     if (!obj->v.object) {
       obj->v.object = pair;
     } else {
@@ -145,11 +159,19 @@ static JsonValue *parse_object(Parser *parser) {
     tail = pair;
 
     skip_whitespace(parser);
-    int c = consume_char(parser);
-    if (c == '}')
+
+    // Check delimiter
+    int c = get_char(parser);
+    if (c == '}') {
+      consume_char(parser);
       return obj;
-    if (c != ',')
+    } else if (c == ',') {
+      consume_char(parser);
+      // Continue to next key-value pair
+    } else {
+      // Anything else is a syntax error
       return NULL;
+    }
   }
 }
 static JsonValue *parse_array(Parser *parser) {
